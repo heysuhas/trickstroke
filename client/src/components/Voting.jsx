@@ -39,7 +39,6 @@ export default function Voting({ gameState, myId }) {
                         {p.name}
                     </button>
                 ))}
-                ))}
             </div>
             <button
                 className="game-btn big"
