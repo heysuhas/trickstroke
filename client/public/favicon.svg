@@ -1,0 +1,24 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD60A"/>
+      <stop offset="100%" stop-color="#FF355E"/>
+    </linearGradient>
+  </defs>
+  
+  <rect width="64" height="64" rx="12" fill="#1e1e1e" />
+  
+  <text x="32" y="48" 
+        font-family="Arial Black, sans-serif" 
+        font-size="40" 
+        font-weight="900" 
+        fill="url(#grad)" 
+        text-anchor="middle"
+        transform="skewX(-5)">
+    TS
+  </text>
+  
+  <rect x="52" y="20" width="4" height="25" fill="#00D2FF">
+    <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+  </rect>
+</svg>
