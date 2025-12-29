@@ -1,8 +1,5 @@
-import { io } from 'socket.io-client';
+import { io } from "socket.io-client";
 
-// Use environment variable/window location or hardcoded local for MVP
-const URL = 'http://localhost:3000';
-
-export const socket = io(URL, {
-    autoConnect: false
+const socket = io(import.meta.env.VITE_API_URL, {
+    transports: ["websocket"]
 });
