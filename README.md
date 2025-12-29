@@ -157,7 +157,7 @@ Contributions are welcome! Feel free to open an issue or submit a pull request.
 
 ## 📄 License
 
-This project was created for the TrickStroke Game Development Project.
+This game was made for fun, so don't hate me for bugging many things out<3
 
 ---
 
