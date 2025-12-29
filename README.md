@@ -13,6 +13,11 @@
 
 ---
 
+> [!NOTE]
+> This game was made **for fun** and is **not scalable** as of now with the current codebase. It's designed for small groups of friends to enjoy together. If needed, I'll scale it in the future<3
+
+---
+
 ## 🎮 How to Play
 
 ### 1. **Join a Lobby**
