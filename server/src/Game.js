@@ -11,8 +11,9 @@ export class Game {
 
         // Configurable Game Settings
         this.settings = {
-            rounds: CONFIG.DEFAULT_ROUNDS,
-            turnTime: CONFIG.DEFAULT_TURN_TIME,
+            matches: 3, // Default matches
+            artistTime: 15,
+            tricksterTime: 25,
             discussionTime: CONFIG.DEFAULT_DISCUSSION_TIME,
             votingTime: CONFIG.DEFAULT_VOTING_TIME
         };
@@ -21,6 +22,7 @@ export class Game {
         this.tricksterId = null;
         this.secretWord = null;
         this.tricksterOptions = null;
+        this.currentMatch = 1;
         this.currentRound = 1;
 
         this.drawOrder = [];
@@ -87,7 +89,7 @@ export class Game {
             if (this.phase === GAME_PHASES.WORD_SUBMISSION) {
                 const currentDrawer = this.drawOrder[this.currentDrawerIndex];
                 if (socketId === currentDrawer) {
-                    clearTimeout(this.timer);
+                    clearInterval(this.timer);
                     this.nextTurn();
                 }
             }
@@ -122,6 +124,7 @@ export class Game {
             currentDrawerId: this.drawOrder[this.currentDrawerIndex] || null,
             timeLeft: this.timeLeft,
             submittedWords: this.submittedWords,
+            currentMatch: this.currentMatch,
             currentRound: this.currentRound,
             skipVotesCount: this.skipVotes.size,
             settings: this.settings // Send settings to client if needed
@@ -139,12 +142,22 @@ export class Game {
         }
 
         // Apply Config
-        if (config.rounds) this.settings.rounds = parseInt(config.rounds);
-        if (config.turnTime) this.settings.turnTime = parseInt(config.turnTime);
+        if (config.matches) this.settings.matches = parseInt(config.matches);
+        if (config.artistTime) this.settings.artistTime = parseInt(config.artistTime);
+        if (config.tricksterTime) this.settings.tricksterTime = parseInt(config.tricksterTime);
         if (config.discussionTime) this.settings.discussionTime = parseInt(config.discussionTime);
 
-        this.currentRound = 1;
+        this.currentMatch = 1;
         this.usedSecretWords.clear();
+        this.startMatch();
+    }
+
+    startMatch() {
+        // MATCH START: Pick New Trickster, Reset Round Count
+        this.currentRound = 1;
+        const tricksterIndex = Math.floor(Math.random() * this.players.length);
+        this.tricksterId = this.players[tricksterIndex].id;
+
         this.startRound();
     }
 
@@ -158,12 +171,10 @@ export class Game {
     }
 
     startRound() {
+        // ROUND START: New Word, Reshuffle Turn Order, Keep Same Trickster
         this.submittedWords = [];
         this.votes.clear();
         this.skipVotes.clear();
-
-        const tricksterIndex = Math.floor(Math.random() * this.players.length);
-        this.tricksterId = this.players[tricksterIndex].id;
 
         const word = this.getUniqueWord();
         this.secretWord = word;
@@ -209,6 +220,7 @@ export class Game {
         }
 
         const isTrickster = drawerId === this.tricksterId;
+        const turnDuration = isTrickster ? this.settings.tricksterTime : this.settings.artistTime;
 
         if (this.currentDrawerIndex === 0 && isTrickster) {
             const options = [this.secretWord];
@@ -224,19 +236,24 @@ export class Game {
         }
 
         this.broadcastState();
-        this.startTimer(this.settings.turnTime, () => {
+        this.startTimer(turnDuration, () => {
             this.nextTurn();
         });
     }
 
     handleWordSubmission(socketId, word) {
         const currentDrawer = this.drawOrder[this.currentDrawerIndex];
+        // Allow submission if it's their turn
         if (socketId !== currentDrawer || this.phase !== GAME_PHASES.WORD_SUBMISSION) return;
 
         const cleanWord = word.trim().toLowerCase();
         const cleanSecret = this.secretWord.toLowerCase();
 
         // VALDATION: Check for exact match OR containing/contained secret word
+        // Exceptions for Trickster? No, Trickster also forbidden from saying secret word usually?
+        // Actually, Trickster WANTS to blend in. If they say the secret word, they are essentially proving they know it (if 1st turn, suspicious. if later, normal).
+        // But game rules usually forbid artists from saying it. Trickster can?
+        // Let's keep rule for everyone for now to prevent easy "I am innocent" proofs.
         if (cleanWord === cleanSecret || cleanWord.includes(cleanSecret) || cleanSecret.includes(cleanWord)) {
             this.io.to(socketId).emit(EVENTS.ERROR, { message: `Too close to the secret word!` });
             return;
@@ -255,14 +272,14 @@ export class Game {
             word: word.trim()
         });
 
-        clearTimeout(this.timer);
+        clearInterval(this.timer);
         this.nextTurn();
     }
 
     startDiscussion() {
         this.phase = GAME_PHASES.DISCUSSION;
         this.skipVotes.clear();
-        clearTimeout(this.timer);
+        clearInterval(this.timer);
         this.broadcastState();
         this.startTimer(this.settings.discussionTime, () => this.startVoting());
     }
@@ -301,7 +318,7 @@ export class Game {
         this.votes.set(socketId, targetId);
         const connectedCount = this.players.filter(p => p.isConnected).length;
         if (this.votes.size >= connectedCount) {
-            clearTimeout(this.timer);
+            clearInterval(this.timer);
             this.finalizeVotes();
         }
     }
@@ -326,19 +343,27 @@ export class Game {
             }
         }
 
-        // SCORING LOGIC
-        // Tie = Trickster Scapes (Wins Round) ? Or No One Wins?
-        // Let's say Tie -> No one dies -> Trickster wins round points -> +50
-        // If caught -> Artists +100
-        // If not caught (wrong person) -> Trickster +200
-
         let winner = '';
-        if (isTie) {
-            winner = 'TRICKSTER (TIE)';
-            // Trickster gets partial points for surviving via tie?
+        let matchEnded = false;
+
+        if (votedOutId === 'SKIP') {
+            // SKIP VOTED -> NEXT ROUND, SAME MATCH
+            winner = 'NO ONE (SKIPPED)';
             const trickster = this.players.find(p => p.id === this.tricksterId);
             if (trickster) trickster.score += 50;
+            votedOutId = null;
+            matchEnded = false; // Continue Match
+        } else if (isTie) {
+            // TIE -> TRICKSTER SURVIVES BUT MATCH ENDS? 
+            // OR TIE -> NO ONE DIES -> NEXT ROUND? 
+            // Usually Tie = Trickster Wins Round/Match. Let's say Tie ends Match favoring Trickster.
+            winner = 'TRICKSTER (TIE)';
+            const trickster = this.players.find(p => p.id === this.tricksterId);
+            if (trickster) trickster.score += 50;
+            matchEnded = true;
         } else {
+            // ELIMINATION -> MATCH ENDS
+            matchEnded = true;
             if (votedOutId === this.tricksterId) {
                 winner = 'ARTISTS';
                 this.players.forEach(p => {
@@ -359,32 +384,40 @@ export class Game {
             votes: Object.fromEntries(this.votes)
         };
 
-        // Decide Next Phase
-        if (this.currentRound < this.settings.rounds) {
-            // Intermission Phase
-            this.phase = GAME_PHASES.LEADERBOARD;
+        // Broadcast Round Result
+        // Broadcast Round Result
+        this.io.to(this.partyId).emit('round_end', resultData);
+
+        // Show Leaderboard regardless of outcome
+        this.phase = GAME_PHASES.LEADERBOARD;
+        this.broadcastState();
+
+        if (!matchEnded) {
+            // NEXT ROUND (SAME MATCH)
             this.currentRound++;
-
-            // Broadcast Result + Leaderboard
-            // We attach resultData to the state update or send separate event?
-            // Let's rely on update_state having lastResult
-            this.io.to(this.partyId).emit('round_end', resultData);
-            this.broadcastState(); // State has scores
-
             setTimeout(() => {
                 this.startRound();
-            }, 8000); // 8 seconds to view leaderboard
+            }, 6000);
         } else {
-            // Final Game Over
-            this.phase = GAME_PHASES.GAME_OVER;
-            this.io.to(this.partyId).emit('game_over', resultData); // Final result
-            this.broadcastState();
-
-            setTimeout(() => {
-                this.phase = GAME_PHASES.LOBBY;
-                this.players.forEach(p => p.score = 0); // Reset scores
+            // MATCH ENDED -> CHECK IF GAME OVER
+            if (this.currentMatch < this.settings.matches) {
+                // NEXT MATCH
+                this.currentMatch++;
+                setTimeout(() => {
+                    this.startMatch();
+                }, 8000);
+            } else {
+                // GAME OVER
+                this.phase = GAME_PHASES.GAME_OVER;
+                this.io.to(this.partyId).emit('game_over', resultData);
                 this.broadcastState();
-            }, 15000); // 15 seconds to view final winner
+
+                setTimeout(() => {
+                    this.phase = GAME_PHASES.LOBBY;
+                    this.players.forEach(p => p.score = 0);
+                    this.broadcastState();
+                }, 15000);
+            }
         }
     }
 

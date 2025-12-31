@@ -3,9 +3,12 @@ import { useState, useEffect } from 'react';
 export default function TricksterWordSelection({ socket }) {
     const [options, setOptions] = useState([]);
 
+    const [customWord, setCustomWord] = useState('');
+
     useEffect(() => {
         function onTricksterTurnStart(data) {
             setOptions(data.options);
+            setCustomWord('');
         }
 
         socket.on('trickster_turn_start', onTricksterTurnStart);
@@ -20,6 +23,13 @@ export default function TricksterWordSelection({ socket }) {
         setOptions([]); // Close modal
     };
 
+    const handleCustomSubmit = (e) => {
+        e.preventDefault();
+        if (customWord.trim()) {
+            handleSelect(customWord.trim());
+        }
+    };
+
     if (options.length === 0) return null;
 
     return (
@@ -28,9 +38,9 @@ export default function TricksterWordSelection({ socket }) {
             background: 'rgba(0,0,0,0.8)', zIndex: 99,
             display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
-            <div className="input-card" style={{ width: 400 }}>
+            <div className="input-card pop-in" style={{ width: 450 }}>
                 <h2 style={{ color: 'var(--secondary)', marginBottom: 10 }}>TRICKSTER ADVANTAGE</h2>
-                <p style={{ marginBottom: 20 }}>You are submitting first! Pick a word to blend in or mislead others.</p>
+                <p style={{ marginBottom: 20 }}>Pick a word to blend in OR type your own!</p>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     {options.map((word, i) => (
@@ -45,16 +55,18 @@ export default function TricksterWordSelection({ socket }) {
                     ))}
                 </div>
 
-                <div style={{ marginTop: 20, fontSize: '0.8rem', opacity: 0.5 }}>
-                    (Or type manually in the main input)
+                <div style={{ marginTop: 25, borderTop: '1px solid #555', paddingTop: 20 }}>
+                    <form onSubmit={handleCustomSubmit} style={{ display: 'flex', gap: 10 }}>
+                        <input
+                            className="game-input"
+                            placeholder="Or type custom word..."
+                            value={customWord}
+                            onChange={e => setCustomWord(e.target.value)}
+                            autoFocus
+                        />
+                        <button type="submit" className="game-btn primary">SUBMIT</button>
+                    </form>
                 </div>
-                <button
-                    className="game-btn"
-                    style={{ marginTop: 10, background: 'transparent', color: '#888', textDecoration: 'underline' }}
-                    onClick={() => setOptions([])}
-                >
-                    Close & Type Manually
-                </button>
             </div>
         </div>
     );

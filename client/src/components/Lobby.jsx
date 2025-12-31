@@ -10,6 +10,7 @@ export default function Lobby({ gameState, onAlert }) {
     const [rounds, setRounds] = useState(3);
     const [discussionTime, setDiscussionTime] = useState(60);
     const [turnTime, setTurnTime] = useState(15);
+    const [tricksterTime, setTricksterTime] = useState(25);
 
     const createParty = () => {
         if (!name.trim()) return onAlert ? onAlert('Enter a valid name') : alert('Enter name');
@@ -23,9 +24,10 @@ export default function Lobby({ gameState, onAlert }) {
 
     const startGame = () => {
         socket.emit('start_game', {
-            rounds,
+            matches: rounds,
             discussionTime,
-            turnTime
+            artistTime: turnTime,
+            tricksterTime
         });
     };
 
@@ -80,7 +82,7 @@ export default function Lobby({ gameState, onAlert }) {
 
                                     <div style={{ marginBottom: 15 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                                            <label style={{ fontWeight: 'bold' }}>ROUNDS</label>
+                                            <label style={{ fontWeight: 'bold' }}>MATCHES</label>
                                             <span style={{ color: 'var(--primary)' }}>{rounds}</span>
                                         </div>
                                         <input className="range-input" type="range" min="1" max="5" value={rounds} onChange={e => setRounds(e.target.value)} />
@@ -88,10 +90,18 @@ export default function Lobby({ gameState, onAlert }) {
 
                                     <div style={{ marginBottom: 15 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                                            <label style={{ fontWeight: 'bold' }}>TURN TIME</label>
+                                            <label style={{ fontWeight: 'bold' }}>ARTIST TIME</label>
                                             <span style={{ color: 'var(--primary)' }}>{turnTime}s</span>
                                         </div>
                                         <input className="range-input" type="range" min="10" max="60" step="5" value={turnTime} onChange={e => setTurnTime(e.target.value)} />
+                                    </div>
+
+                                    <div style={{ marginBottom: 15 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                                            <label style={{ fontWeight: 'bold' }}>TRICKSTER TIME</label>
+                                            <span style={{ color: 'var(--primary)' }}>{tricksterTime}s</span>
+                                        </div>
+                                        <input className="range-input" type="range" min="10" max="60" step="5" value={tricksterTime} onChange={e => setTricksterTime(e.target.value)} />
                                     </div>
 
                                     <div style={{ marginBottom: 15 }}>

@@ -14,7 +14,7 @@ import './index.css';
 function App() {
     const [isConnected, setIsConnected] = useState(socket.connected);
     const [gameState, setGameState] = useState(null);
-    const [playerId, setPlayerId] = useState(null);
+    const [playerId, setPlayerId] = useState(socket.id);
     const [alertMsg, setAlertMsg] = useState(null);
     const [roundResult, setRoundResult] = useState(null);
 
@@ -111,7 +111,11 @@ function App() {
                     <Logo width="200" />
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    {gameState.currentRound && <div className="room-badge" style={{ background: 'var(--accent)', color: 'black' }}>ROUND {gameState.currentRound}</div>}
+                    {gameState.currentMatch && (
+                        <div className="room-badge" style={{ background: 'var(--accent)', color: 'black' }}>
+                            MATCH {gameState.currentMatch} | ROUND {gameState.currentRound}
+                        </div>
+                    )}
                     <div className="room-badge">{gameState.partyId}</div>
                 </div>
             </header>

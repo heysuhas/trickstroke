@@ -43,7 +43,7 @@ export default function Voting({ gameState, myId }) {
             <button
                 className="game-btn big"
                 style={{ background: '#555', marginTop: 10, border: '2px solid #888' }}
-                disabled={!selectedId || submitted}
+                disabled={submitted}
                 onClick={() => handleVote('SKIP')}
             >
                 SKIP VOTING (NO ONE DIES)
