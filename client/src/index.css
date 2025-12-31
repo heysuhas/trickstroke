@@ -285,22 +285,63 @@ body {
 
 .word-input-overlay {
   position: absolute;
-  bottom: 40px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 90%;
-  max-width: 500px;
-  z-index: 50;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-width: none;
+  z-index: 100;
+  padding: 20px;
+  pointer-events: none;
+  /* Allow clicking through empty space if we add padding */
+  display: flex;
+  justify-content: center;
 }
 
 .input-card {
+  pointer-events: auto;
   background: var(--bg-card);
   padding: 30px;
   border-radius: var(--radius-lg);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   border: 2px solid var(--primary);
   text-align: center;
-  animation: popIn 0.4s;
+  animation: popIn 0.3s;
+  width: 100%;
+  /* Ensure width is respected */
+}
+
+/* Specific styles for the bottom bar input UI */
+.bottom-input-bar {
+  pointer-events: auto;
+  background: var(--bg-card);
+  padding: 15px 30px;
+  border-radius: 50px;
+  box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.5);
+  border: 2px solid var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 900px;
+  animation: popIn 0.3s;
+}
+
+.bottom-input-bar h2,
+.bottom-input-bar p {
+  display: none;
+}
+
+.input-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 150px;
+}
+
+.input-form {
+  display: flex;
+  gap: 10px;
+  flex: 1;
 }
 
 .player-list {
@@ -372,5 +413,24 @@ body {
   .sidebar-right {
     order: 4;
     height: 300px;
+  }
+
+  /* Responsive Bottom Bar */
+  .bottom-input-bar {
+    flex-direction: column;
+    align-items: stretch;
+    border-radius: 20px 20px 0 0;
+    width: 100%;
+    bottom: 0;
+    left: 0;
+    padding: 15px;
+    gap: 10px;
+  }
+
+  .input-info {
+    align-items: center;
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
   }
 }

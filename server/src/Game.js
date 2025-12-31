@@ -64,28 +64,111 @@ export class Game {
         this.setupPlayerListeners(socket);
     }
 
+    reconnectPlayer(socket, oldId) {
+        const playerIndex = this.players.findIndex(p => p.id === oldId);
+        if (playerIndex === -1) return;
+
+        const player = this.players[playerIndex];
+        player.isConnected = true;
+        player.socket = socket;
+
+        // Update ID references
+        const newId = socket.id;
+        player.id = newId;
+
+        // Update Host
+        if (this.hostId === oldId) this.hostId = newId;
+
+        // Update Trickster
+        if (this.tricksterId === oldId) this.tricksterId = newId;
+
+        // Update Draw Order
+        this.drawOrder = this.drawOrder.map(id => id === oldId ? newId : id);
+
+        // Update Votes (Values are target IDs, Keys are voter IDs)
+        // 1. If they voted:
+        if (this.votes.has(oldId)) {
+            const vote = this.votes.get(oldId);
+            this.votes.delete(oldId);
+            this.votes.set(newId, vote);
+        }
+        // 2. If they were voted for:
+        for (const [voter, target] of this.votes.entries()) {
+            if (target === oldId) this.votes.set(voter, newId);
+        }
+
+        // Update Skip Votes
+        if (this.skipVotes.has(oldId)) {
+            this.skipVotes.delete(oldId);
+            this.skipVotes.add(newId);
+        }
+
+        // Update Submitted Words
+        this.submittedWords.forEach(w => {
+            if (w.playerId === oldId) w.playerId = newId;
+        });
+
+        // Send latest state
+        socket.emit(EVENTS.UPDATE_STATE, this.getPublicState());
+
+        // Inform they need to wait for next round if in middle of one
+        // Unless they are the current drawer?
+        // If they are current drawer, they can continue!
+        const isMyTurn = this.phase === GAME_PHASES.WORD_SUBMISSION && this.drawOrder[this.currentDrawerIndex] === newId;
+        if (isMyTurn) {
+            socket.emit('turn_start', { drawerId: newId });
+            // Resend trickster options if needed? Valid point.
+            if (newId === this.tricksterId && this.currentDrawerIndex === 0 && this.tricksterOptions) {
+                socket.emit('trickster_turn_start', { options: this.tricksterOptions });
+            }
+        } else {
+            // Re-send role info
+            const isTrickster = newId === this.tricksterId;
+            socket.emit('role_assigned', {
+                role: isTrickster ? 'TRICKSTER' : 'ARTIST',
+                word: isTrickster ? null : this.secretWord
+            });
+        }
+
+        socket.to(this.partyId).emit(EVENTS.UPDATE_STATE, this.getPublicState());
+        this.setupPlayerListeners(socket);
+    }
+
     removePlayer(socketId) {
         const index = this.players.findIndex(p => p.id === socketId);
-        if (index !== -1) {
-            if (this.phase === GAME_PHASES.LOBBY) {
-                // In Lobby, fully remove the player so they can rejoin or name can be reused
-                this.players.splice(index, 1);
+        if (index === -1) return;
 
-                // If Host left, assign new host if anyone remains
-                if (this.hostId === socketId && this.players.length > 0) {
-                    this.hostId = this.players[0].id;
-                }
-            } else {
-                // In Game, just mark disconnected to preserve game state/turns
-                this.players[index].isConnected = false;
-                if (this.hostId === socketId) {
-                    const nextHost = this.players.find(p => p.isConnected && p.id !== socketId);
-                    if (nextHost) this.hostId = nextHost.id;
+        console.log(`Player ${this.players[index].name} disconnected`);
+
+        if (this.phase === GAME_PHASES.LOBBY) {
+            this.players.splice(index, 1);
+            if (this.hostId === socketId && this.players.length > 0) {
+                this.hostId = this.players[0].id; // Assign new host
+            }
+        } else {
+            // IN GAME
+            const player = this.players[index];
+            player.isConnected = false;
+
+            // 1. Trickster Disconnected?
+            if (socketId === this.tricksterId && this.phase !== GAME_PHASES.GAME_OVER && this.phase !== GAME_PHASES.LEADERBOARD) {
+                this.handleTricksterDisconnect(player.name);
+                return; // Match ends, so no need to check other things
+            }
+
+            // 2. Voting Phase?
+            if (this.phase === GAME_PHASES.VOTING || this.phase === GAME_PHASES.DISCUSSION) {
+                // Re-check if we have enough votes/skips now that connected count changed
+                const connectedCount = this.players.filter(p => p.isConnected).length;
+                if (this.phase === GAME_PHASES.VOTING && this.votes.size >= connectedCount) {
+                    clearInterval(this.timer);
+                    this.finalizeVotes();
+                } else if (this.phase === GAME_PHASES.DISCUSSION && this.skipVotes.size >= connectedCount) {
+                    this.startVoting();
                 }
             }
 
-            this.broadcastState();
-
+            // 3. Active Drawer Disconnected?
             if (this.phase === GAME_PHASES.WORD_SUBMISSION) {
                 const currentDrawer = this.drawOrder[this.currentDrawerIndex];
                 if (socketId === currentDrawer) {
@@ -93,6 +176,53 @@ export class Game {
                     this.nextTurn();
                 }
             }
+
+            // If Host left, reassign
+            if (this.hostId === socketId) {
+                const nextHost = this.players.find(p => p.isConnected && p.id !== socketId);
+                if (nextHost) this.hostId = nextHost.id;
+            }
+        }
+
+        this.broadcastState();
+    }
+
+    handleTricksterDisconnect(name) {
+        // MATCH ENDS PREMATURELY -> ARTISTS WIN? OR DRAW?
+        // Let's give it to Artists for now, or just generic "Trickster Left"
+        console.log("Trickster disconnected, ending match.");
+
+        const resultData = {
+            winner: 'ARTISTS (TRICKSTER LEFT)',
+            tricksterId: this.tricksterId,
+            votedOutId: null,
+            secretWord: this.secretWord,
+            votes: {}
+        };
+
+        // Give remaining artists points?
+        this.players.forEach(p => {
+            if (p.id !== this.tricksterId && p.isConnected) p.score += 100;
+        });
+
+        this.io.to(this.partyId).emit('round_end', resultData);
+        // Show Leaderboard then Next Match
+        this.phase = GAME_PHASES.LEADERBOARD;
+        this.broadcastState();
+
+        if (this.currentMatch < this.settings.matches) {
+            this.currentMatch++;
+            setTimeout(() => this.startMatch(), 6000);
+        } else {
+            // Game Over
+            this.phase = GAME_PHASES.GAME_OVER;
+            this.io.to(this.partyId).emit('game_over', resultData);
+            this.broadcastState();
+            setTimeout(() => {
+                this.phase = GAME_PHASES.LOBBY;
+                this.players.forEach(p => p.score = 0);
+                this.broadcastState();
+            }, 10000);
         }
     }
 
@@ -111,9 +241,12 @@ export class Game {
     }
 
     getPublicState() {
+        // Filter out disconnected players so they don't appear in lists
+        const connectedPlayers = this.players.filter(p => p.isConnected);
+
         return {
             partyId: this.partyId,
-            players: this.players.map(p => ({
+            players: connectedPlayers.map(p => ({
                 id: p.id,
                 name: p.name,
                 isConnected: p.isConnected,
@@ -127,7 +260,7 @@ export class Game {
             currentMatch: this.currentMatch,
             currentRound: this.currentRound,
             skipVotesCount: this.skipVotes.size,
-            settings: this.settings // Send settings to client if needed
+            settings: this.settings
         };
     }
 

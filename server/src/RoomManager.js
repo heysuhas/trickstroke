@@ -47,8 +47,16 @@ export class RoomManager {
         }
 
         if (game.hasStarted) {
-            // Handle reconnect logic here if needed, for now just block join
-            // Or if simple MVP, just error
+            // Check if player is reconnecting
+            const existingPlayer = game.players.find(p => p.name === playerName && !p.isConnected);
+            if (existingPlayer) {
+                console.log(`Player ${playerName} reconnecting to ${partyId}`);
+                socket.join(partyId);
+                this.playerMap.set(socket.id, partyId);
+                game.reconnectPlayer(socket, existingPlayer.id);
+                return;
+            }
+
             socket.emit(EVENTS.ERROR, { message: 'Game already in progress' });
             return;
         }

@@ -17,6 +17,7 @@ function App() {
     const [playerId, setPlayerId] = useState(socket.id);
     const [alertMsg, setAlertMsg] = useState(null);
     const [roundResult, setRoundResult] = useState(null);
+    const [isTricksterPicking, setIsTricksterPicking] = useState(false);
 
     // Track my role info
     const [myRoleData, setMyRoleData] = useState({ role: null, word: null });
@@ -39,6 +40,7 @@ function App() {
             console.log("Role Assigned:", data);
             setMyRoleData(data);
             setRoundResult(null);
+            setIsTricksterPicking(false);
         }
 
         function onRoundEnd(data) {
@@ -127,7 +129,6 @@ function App() {
             <main className="main-area">
                 <WordBoard gameState={gameState} />
 
-                {/* Pass myWord to input so it can display it */}
                 <WordInput gameState={gameState} myId={playerId} myWord={myRoleData.word} />
 
                 <TricksterWordSelection socket={socket} />
